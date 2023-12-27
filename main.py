@@ -1,5 +1,6 @@
-import numpy
-import seaborn
+import seaborn as sns
+import numpy as np
+import time
 
 # This is a sample Python script.
 
@@ -9,9 +10,9 @@ import seaborn
 
 def print_hi(name):
     # Use a breakpoint in the code line below to debug your script.
-    a = numpy.array()
-    b = seaborn.plotting_context()
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+    for i in range(10):
+        print(i)
+        time.sleep(60)
 
 
 # Press the green button in the gutter to run the script.
