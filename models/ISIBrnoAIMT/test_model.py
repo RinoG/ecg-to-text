@@ -63,11 +63,15 @@ def test_model(model_directory, data_directory, output_directory):
 
 if __name__ == '__main__':
     # Parse arguments.
-    if len(sys.argv) != 4:
-        raise Exception('Include the model, data, and output folders as arguments, e.g., python test_model.py model data outputs.')
-
-    model_directory = sys.argv[1]
-    data_directory = sys.argv[2]
-    output_directory = sys.argv[3]
+    # if len(sys.argv) != 4:
+    #     raise Exception('Include the model, data, and output folders as arguments, e.g., python test_model.py model data outputs.')
+    #
+    # model_directory = sys.argv[1]
+    # data_directory = sys.argv[2]
+    # output_directory = sys.argv[3]
+    os.chdir('../..')
+    model_directory = 'models/ISIBrnoAIMT/'
+    data_directory = 'cinc-2021_data/'
+    output_directory = 'models/ISIBrnoAIMT/test_output/'
 
     test_model(model_directory, data_directory, output_directory)

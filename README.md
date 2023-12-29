@@ -1,18 +1,16 @@
 # ecg-to-text
+Work in progress ...
 
 ## Project Overview
-This project aims to develop an AI model that inputs ECG (Electrocardiogram) data and outputs a detailed report. The report will focus on diagnosing various heart pathologies. The training of the model is based on the MIMIC-IV-ECG dataset from PhysioNet.
+This project aims to develop a model that inputs ECG (Electrocardiogram) data and outputs a detailed report. The report will focus on diagnosing various heart pathologies. The training of the model is based on the [Will Two Do? Challenge 2021](https://physionet.org/content/challenge-2021/1.0.3/) dataset from PhysioNet.
+
+
 
 ## Dataset
-The MIMIC-IV-ECG dataset, available from PhysioNet, is the cornerstone of our training process.
-
-## Objectives
-- To create an AI model capable of analyzing ECG data.
-- To accurately diagnose a range of heart pathologies.
-- To generate comprehensive reports based on the ECG data analysis.
+The [Will Two Do? Challenge 2021](https://physionet.org/content/challenge-2021/1.0.3/) dataset, available from PhysioNet, is the cornerstone of our training process.
 
 ## Technologies Used
-(Include a list of technologies, libraries, and frameworks planed to use. For example, Python, TensorFlow, PyTorch, etc.)
+(Include a list of technologies, libraries, and frameworks planed to use. For example, Python, PyTorch, etc.)
 
 ## Installation
 (Instructions on how to install and set up project. Include steps to clone the repo, install dependencies, etc.)

@@ -622,7 +622,7 @@ def run_model(model, header, recording):
         labels = q >= thresholds
         out_labels[i,:] = labels
     labels = np.median(out_labels,axis=0)
-    labels = np.array(labels,dtype=np.int)
+    labels = np.array(labels,dtype=int)
     return classes, labels, q
 
 ################################################################################
