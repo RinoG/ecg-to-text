@@ -14,7 +14,7 @@ def main():
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     val_dataset = PtbXlDataset('data_ptb-xl/', 'val', n_BoW)
-    val_dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=True)
 
     model = NN(n_BoW).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
