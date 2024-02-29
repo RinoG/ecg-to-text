@@ -39,7 +39,7 @@ def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10):
 
         if val_score > best_score:
             best_score = val_score
-            torch.save(model.state_dict(), './models/02_ISIBrnoAIMT_BagOfWords/model.pt')
+            torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model.pt')
 
         end_time = time.time()
         print(f'Epoch [{epoch + 1}/{n_epochs}], '
@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     os.chdir('../../')
 
-    n_BoW = 50
+    n_BoW = 20
     dataset = PtbXlDataset('data_ptb-xl/', 'train', n_BoW)
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
@@ -90,5 +90,5 @@ if __name__ == '__main__':
 
     train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=500)
 
-    # torch.save(model.state_dict(), './models/02_ISIBrnoAIMT_BagOfWords/model.pt')
+    # torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model.pt')
 

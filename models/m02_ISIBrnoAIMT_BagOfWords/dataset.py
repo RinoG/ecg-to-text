@@ -16,12 +16,21 @@ class PtbXlDataset(Dataset):
         self.n_BoW = n_BoW
 
         self.df_data = pd.read_csv(f'{dataset_path}/{mode}.csv')
-        self.df_BoW = pd.read_csv(f'{dataset_path}/{mode}_report.csv')
+        self.df_BoW = pd.read_csv(f'{dataset_path}/bag_of_words/{mode}_{n_BoW}_BoW.csv')
 
         mismatches = self.df_data['ecg_id'] != self.df_BoW['ecg_id']
         if mismatches.any():
             mismatched_indices = mismatches[mismatches].index.tolist()
             raise ValueError(f"ECG ID mismatch at indices: {mismatched_indices}")
+
+        # Butterworth Filter Init
+        ecg_signal_path = self.df_data.iloc[0]["filename_hr"]
+        fs = wfdb.rdrecord(self.dataset_path + ecg_signal_path).fs
+        low_cutoff = 1
+        high_cutoff = 47
+        nyquist_freq = fs / 2
+        w_n = (low_cutoff / nyquist_freq, high_cutoff / nyquist_freq)
+        self.butter_b, self.butter_a = signal.butter(N=3, Wn=w_n, btype='bandpass')
 
     def __len__(self):
         return len(self.df_data)
@@ -35,9 +44,7 @@ class PtbXlDataset(Dataset):
 
         return ecg_signal.transpose(), BoW
 
-    def preprocessing(recording, fs=500):
-        b, a = signal.butter(3, [1 / 250, 47 / 250], 'bandpass')
-
+    def preprocessing(self, recording, fs=500):
         # if fs == 1000:
         #     recording = signal.resample_poly(recording, up=1, down=2, axis=-1)  # to 500Hz
         #     fs = 500
@@ -46,7 +53,7 @@ class PtbXlDataset(Dataset):
         # else:
         #     recording = signal.resample(recording, int(recording.shape[1] * 500 / fs), axis=1)
 
-        recording = signal.filtfilt(b, a, recording)
+        recording = signal.filtfilt(self.butter_b, self.butter_a, recording)
         # recording = zscore(recording, axis=-1)
         recording = np.nan_to_num(recording)
         # recording = zero_padding(recording)

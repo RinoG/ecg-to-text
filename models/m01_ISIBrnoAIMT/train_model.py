@@ -9,7 +9,7 @@ if __name__ == '__main__':
 
     os.chdir('../../')
     data_directory = './data_cinc-2021/'
-    model_directory = './models/01_ISIBrnoAIMT/'
+    model_directory = './models/m01_ISIBrnoAIMT/'
     training_code(data_directory, model_directory) ### Implement this function!
 
     print('Done.')
