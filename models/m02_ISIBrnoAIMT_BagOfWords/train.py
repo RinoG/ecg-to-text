@@ -35,11 +35,11 @@ def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10):
             losses.append(J.item())
 
         mean_losses = np.mean(losses)
-        val_score = valid_part(model, val_dataloader)
+        val_score = get_f1_score(model, val_dataloader)
 
         if val_score > best_score:
             best_score = val_score
-            torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model.pt')
+            torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model_20_BoW.pt')
 
         end_time = time.time()
         print(f'Epoch [{epoch + 1}/{n_epochs}], '
@@ -48,7 +48,7 @@ def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10):
               f'Time: {round(end_time - start_time, 2)} s')
 
 
-def valid_part(model, dataloader):
+def get_predictions(model, dataloader):
     targets = []
     predictions = []
     model.eval()
@@ -65,8 +65,12 @@ def valid_part(model, dataloader):
     targets = np.concatenate(targets, axis=0)
     predictions = np.concatenate(predictions, axis=0)
     predictions_binary = (predictions >= 0.5).astype(int)
+    return targets, predictions_binary
 
-    f1 = f1_score(targets, predictions_binary, average='micro')
+
+def get_f1_score(model, dataloader, average='binary'):
+    y, p = get_predictions(model, dataloader)
+    f1 = f1_score(y, p, average=average)  # IOU
     return f1
 
 
@@ -90,5 +94,5 @@ if __name__ == '__main__':
 
     train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=500)
 
-    # torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model.pt')
+    # torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model_20_BoW.pt')
 
