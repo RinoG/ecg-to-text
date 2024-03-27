@@ -1,17 +1,21 @@
 import os
 import time
+import logging
 import numpy as np
 import torch
 import tqdm
 from torch import nn
 from torch.utils.data import DataLoader
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, jaccard_score
 
 
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+logger = logging.getLogger(__name__)
 
-def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10):
+def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10, patience=5):
+    logger.info("Start training")
     best_score = 0.0
+    early_stopping_counter = 0
 
     for epoch in range(n_epochs):
         start_time = time.time()
@@ -27,25 +31,33 @@ def train(model, dataloader, val_dataloader, criterion, optimizer, n_epochs=10):
             y, p = model(signals, leads)
 
             loss = criterion(y, reports)
-            sparsity_loss = torch.mean(-4*p*(p-1))
-            J = loss + sparsity_loss
-            J.backward()
+
+            loss.backward()
             optimizer.step()
 
-            losses.append(J.item())
+            losses.append(loss.item())
 
         mean_losses = np.mean(losses)
-        val_score = get_f1_score(model, val_dataloader)
+        f1, iou = get_metrics(model, val_dataloader)
 
-        if val_score > best_score:
-            best_score = val_score
-            torch.save(model.state_dict(), './models/m02_ISIBrnoAIMT_BagOfWords/model_20_BoW.pt')
+        if iou > best_score:
+            best_score = iou
+            early_stopping_counter = 0
+            n_bow = reports.shape[1]
+            torch.save(model.state_dict(), f'./models/m02_ISIBrnoAIMT_BagOfWords/model_{n_bow}_BoW.pt')
+        else:
+            early_stopping_counter += 1
 
         end_time = time.time()
         print(f'Epoch [{epoch + 1}/{n_epochs}], '
               f'Loss: {mean_losses:.4f}, '
-              f'Validation Score: {val_score:.4f}, '
+              f'F1 Score: {f1:.4f}, '
+              f'IOU Score: {iou:.4f}, '
               f'Time: {round(end_time - start_time, 2)} s')
+
+        if early_stopping_counter >= patience:
+            print(f"No improvement in IOU score for {patience} consecutive epochs. Stopping early.")
+            break
 
 
 def get_predictions(model, dataloader):
@@ -68,10 +80,11 @@ def get_predictions(model, dataloader):
     return targets, predictions_binary
 
 
-def get_f1_score(model, dataloader, average='binary'):
+def get_metrics(model, dataloader, average='samples'):
     y, p = get_predictions(model, dataloader)
-    f1 = f1_score(y, p, average=average)  # IOU
-    return f1
+    f1 = f1_score(y, p, average=average)
+    iou = jaccard_score(y, p, average=average)
+    return f1, iou
 
 
 if __name__ == '__main__':
