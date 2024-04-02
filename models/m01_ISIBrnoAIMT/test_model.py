@@ -40,7 +40,8 @@ def test_model(model_directory, data_directory, output_directory):
     print('Running model...')
 
     for i in range(num_recordings):
-        print('    {}/{}...'.format(i+1, num_recordings))
+        if i % 500 == 0:
+            print('    {}/{}...'.format(i+1, num_recordings))
 
         # Load header and recording.
         header = load_header(header_files[i])

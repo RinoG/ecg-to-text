@@ -10,7 +10,7 @@ from model_code import *
 from scipy import signal
 from scipy.stats import zscore
 from scipy.optimize import differential_evolution
-from sklearn.metrics import average_precision_score,precision_recall_curve,roc_curve
+from sklearn.metrics import average_precision_score,precision_recall_curve,roc_curve, f1_score
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -434,7 +434,7 @@ def train_part(model,dataset,loss,opt):
         targets = np.concatenate(targets, axis=0)
         outputs = np.concatenate(outputs, axis=0)
         auprc = average_precision_score(y_true=targets, y_score=outputs)
-    return auprc
+    return auprc,targets,outputs
 
 
 def training_code(data_directory, model_directory):
@@ -500,7 +500,7 @@ def _training_code(data_directory, model_directory, ensamble_ID):
     EPOCHS = 50
     for epoch in range(EPOCHS):
         print(f"============================[{epoch}]============================")
-        train_auprc = train_part(model,train,lossBCE,opt)
+        train_auprc,train_targets,train_outputs = train_part(model,train,lossBCE,opt)
         print(train_auprc)
 
         valid_auprc,valid_targets,valid_outputs = valid_part(model,valid)
@@ -509,6 +509,8 @@ def _training_code(data_directory, model_directory, ensamble_ID):
         OUTPUT.append({'epoch':epoch,
                        'model':copy.deepcopy(model).cpu().state_dict(),
                        'train_auprc':train_auprc,
+                       'train_targets': train_targets,
+                       'train_outputs': train_outputs,
                        'valid_auprc':valid_auprc,
                        'valid_targets':valid_targets,
                        'valid_outputs':valid_outputs})
@@ -527,7 +529,7 @@ def _training_code(data_directory, model_directory, ensamble_ID):
 
 # Generic function for loading a model.
 def _load_model(model_directory,id):
-    filename = Path(model_directory,f'MODEL_{id}.pickle')
+    filename = Path(model_directory,f'model_output/MODEL_{id}.pickle')
     model = {}
     with open(filename, 'rb') as handle:
         input = pickle.load(handle)
@@ -618,7 +620,7 @@ def run_model(model, header, recording):
 
         _,q = classifier(recording,leads)
         #p = torch.sigmoid(_probabilities)
-        q = q.df_data[0, :].cpu().numpy()
+        q = q.cpu().detach().numpy().squeeze()
 
         # Predict labels and probabilities.
         labels = q >= thresholds
