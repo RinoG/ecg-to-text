@@ -71,8 +71,8 @@ if __name__ == '__main__':
     # data_directory = sys.argv[2]
     # output_directory = sys.argv[3]
     os.chdir('../..')
-    model_directory = 'models/m01_ISIBrnoAIMT/'
+    model_directory = 'models/m01_classification_ISIBrnoAIMT/'
     data_directory = 'data_cinc-2021/'
-    output_directory = 'models/m01_ISIBrnoAIMT/test_output/'
+    output_directory = 'models/m01_classification_ISIBrnoAIMT/test_output/'
 
     test_model(model_directory, data_directory, output_directory)

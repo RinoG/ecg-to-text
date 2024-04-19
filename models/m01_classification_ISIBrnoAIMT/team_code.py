@@ -37,7 +37,7 @@ class optim_genetics:
     def __init__(self, target, outputs, classes):
         self.target = target
         self.outputs = outputs
-        weights_file = './models/m01_ISIBrnoAIMT/weights.csv'
+        weights_file = './models/m01_classification_ISIBrnoAIMT/weights.csv'
         self.normal_class = '426783006'
         equivalent_classes = [['713427006', '59118001'],
                               ['284470004', '63593006'],
@@ -145,7 +145,7 @@ class mytqdm(tqdm):
 class challengeloss(nn.Module):
     def __init__(self):
         super(challengeloss,self).__init__()
-        weights_file = './models/m01_ISIBrnoAIMT/weights.csv'
+        weights_file = './models/m01_classification_ISIBrnoAIMT/weights.csv'
         normal_class = '426783006'
         equivalent_classes = [['713427006', '59118001'],
                               ['284470004', '63593006'],
@@ -390,15 +390,15 @@ def valid_part(model,dataset):
             t = t.to(DEVICE)
             l = l.float().to(DEVICE)
 
-            y,p = model(x, l)
+            y, p = model(x, l)
             #p = torch.sigmoid(y)
 
-            targets.append(t.df_data.cpu().numpy())
-            outputs.append(p.df_data.cpu().numpy())
+            targets.append(t.detach().cpu().numpy())
+            outputs.append(p.detach().cpu().numpy())
     targets = np.concatenate(targets, axis=0)
     outputs = np.concatenate(outputs, axis=0)
     auprc = average_precision_score(y_true=targets, y_score=outputs)
-    return auprc,targets,outputs
+    return auprc, targets, outputs
 
 def train_part(model,dataset,loss,opt):
     targets = []
@@ -418,19 +418,21 @@ def train_part(model,dataset,loss,opt):
             y, p = model(x, l)
             #p = torch.sigmoid(y)
 
-            M = chloss(t,p)
+            # M = chloss(t,p)
             N = loss(input=y, target=t)
             Q = torch.mean(-4*p*(p-1))
-            J = N - M + Q
+            # J = N - M + Q
+            J = N + Q
             J.backward()
-            pbar.set_postfix(np.array([M.df_data.cpu().numpy(),
-                                       N.df_data.cpu().numpy(),
-                                       Q.data.cpu().numpy()]))
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
+
+            # pbar.set_postfix(np.array([M.detach().cpu().numpy(),
+            #                            N.detach().cpu().numpy(),
+            #                            Q.data.cpu().numpy()]))
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
             opt.step()
 
-            targets.append(t.df_data.cpu().numpy())
-            outputs.append(p.df_data.cpu().numpy())
+            targets.append(t.detach().cpu().numpy())
+            outputs.append(p.detach().cpu().numpy())
         targets = np.concatenate(targets, axis=0)
         outputs = np.concatenate(outputs, axis=0)
         auprc = average_precision_score(y_true=targets, y_score=outputs)
@@ -440,8 +442,8 @@ def train_part(model,dataset,loss,opt):
 def training_code(data_directory, model_directory):
     select4deployment.calls = 0
     _training_code(data_directory, model_directory,str(0))
-    _training_code(data_directory, model_directory,str(1))
-    _training_code(data_directory, model_directory,str(2))
+    # _training_code(data_directory, model_directory,str(1))
+    # _training_code(data_directory, model_directory,str(2))
 
 
 def _training_code(data_directory, model_directory, ensamble_ID):
@@ -460,7 +462,7 @@ def _training_code(data_directory, model_directory, ensamble_ID):
 
     # negative to positive ratio
     loss_weight = (len(train) - train.summary(output='numpy'))/train.summary(output='numpy')
-
+    loss_weight = [0 if x == float('inf') else x for x in loss_weight]
 
     # to be saved in resulting model pickle
     train_files = train.files['header'].to_list()
@@ -524,7 +526,7 @@ def _training_code(data_directory, model_directory, ensamble_ID):
         pickle.dump(dataset.classes,handle,protocol=pickle.HIGHEST_PROTOCOL)
         pickle.dump(loss_weight,handle,protocol=pickle.HIGHEST_PROTOCOL)
 
-    find_thresholds(name,model_directory)
+    # find_thresholds(name,model_directory)
 
 
 # Generic function for loading a model.

@@ -33,7 +33,7 @@ class PtbXlDataset(Dataset):
         self.butter_b, self.butter_a = signal.butter(N=3, Wn=w_n, btype='bandpass')
 
     def __len__(self):
-        return len(self.df_data)
+        return len(self.df_BoW)
 
     def __getitem__(self, idx):
         BoW = self.df_BoW.iloc[idx].values[1:]
@@ -44,6 +44,11 @@ class PtbXlDataset(Dataset):
 
         return ecg_signal.transpose(), BoW
 
+    def summary(self,output):
+        if output=='pandas':
+            return pd.Series(self.df_BoW.drop('ecg_id', axis=1).to_numpy().sum(axis=0),index=self.df_BoW.columns[1:])
+        if output=='numpy':
+            return self.df_BoW.drop('ecg_id', axis=1).to_numpy().sum(axis=0)
     def preprocessing(self, recording, fs=500):
         # if fs == 1000:
         #     recording = signal.resample_poly(recording, up=1, down=2, axis=-1)  # to 500Hz

@@ -38,7 +38,8 @@ def find_challenge_files(data_directory):
     header_files = list()
     recording_files = list()
 
-    records_file = os.path.join(data_directory, 'RECORDS')
+    # records_file = os.path.join(data_directory, 'RECORDS')
+    records_file = os.path.join(data_directory, 'RECORDS_PTB-XL')
 
     with open(records_file, 'r') as file:
         record_paths = file.read().splitlines()
