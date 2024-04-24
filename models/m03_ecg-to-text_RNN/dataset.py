@@ -11,10 +11,10 @@ import wfdb
 
 class Lang:
     def __init__(self):
-        self.word2index = {"<sos>": 0, "<eos>": 1}
+        self.word2index = {"<sos>": 0, "<eos>": 1, "<pad>": 2}
         self.word2count = {}
-        self.index2word = {0: "<sos>", 1: "<eos>"}
-        self.n_words = 2  # Count SOS and EOS
+        self.index2word = {0: "<sos>", 1: "<eos>", 2: "<pad>"}
+        self.n_words = 3  # Count SOS EOS and PAD
         self.max_len = 0
 
     def addSentence(self, sentence):
@@ -23,8 +23,8 @@ class Lang:
             self.addWord(word)
 
         n = len(sentences) + 2
-        if n >= self.max_len:
-            self.max_len = n + 2
+        if n > self.max_len:
+            self.max_len = n
 
     def addWord(self, word):
         if word not in self.word2index:
@@ -61,7 +61,7 @@ def prepareData(reports):
     return output_lang, sentences
 
 def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
+    return [lang.word2index[word] for word in sentence.split(' ') if word in lang.word2index]
 
 
 def tensorFromSentence(lang, sentence, device):
@@ -70,19 +70,23 @@ def tensorFromSentence(lang, sentence, device):
     return torch.tensor(indexes, dtype=torch.long, device=device).view(1, -1)
 
 def get_signals(file_path, data):
-    ecg_signal_path = data["filename_hr"]
-    return [wfdb.rdrecord(file_path + '/' + path).p_signal for path in ecg_signal_path]
+    ecg_signal_path = data["filename_lr"]
+    return np.array([wfdb.rdrecord(file_path + '/' + path).p_signal for path in ecg_signal_path])
 
-def get_dataloader(file_path, mode, batch_size, device):
+def get_dataloader(file_path, mode, batch_size, device, _lang=None):
     data = pd.read_csv(file_path+f'/{mode}.csv', sep=',')
     # signal_files = [f"{file_path}/signal_{i + 1}.csv" for i in range(10)]
     # signals = np.array([pd.read_csv(f).values for f in signal_files])
     signals = get_signals(file_path, data)
+    # reduce dimensions of signals
 
     output_lang, sentences = prepareData(data['preprocessed_report'])
 
+    if _lang:
+        output_lang = _lang
+
     n = len(sentences)
-    target_ids = np.zeros((n, output_lang.max_len), dtype=np.int32)
+    target_ids = np.zeros((n, output_lang.max_len), dtype=np.int32) + output_lang.word2index['<pad>']
 
     for idx, tgt in enumerate(sentences):
         tgt_ids = indexesFromSentence(output_lang, tgt)
