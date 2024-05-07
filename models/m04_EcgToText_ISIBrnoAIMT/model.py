@@ -1,60 +1,99 @@
-import random
 import torch
-from torch import nn
+import torch.nn as nn
 import torch.nn.functional as F
-
 
 SOS_token = 1
 MAX_LENGTH = 50
 teacher_forcing_ratio = 0.2
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+class MyResidualBlock(nn.Module):
+    def __init__(self, down_sample, hidden_size=256):
+        super(MyResidualBlock, self).__init__()
+        self.down_sample = down_sample
+        self.stride = 2 if self.down_sample else 1
+        K = 9
+        P = (K-1) // 2
+        self.conv1 = nn.Conv2d(in_channels=hidden_size,
+                               out_channels=hidden_size,
+                               kernel_size=(1, K),
+                               stride=(1, self.stride),
+                               padding=(0, P),
+                               bias=False)
+        self.bn1 = nn.BatchNorm2d(hidden_size)
 
-class SimpleEncoderRNN(nn.Module):
-    def __init__(self, input_size, hidden_size, dropout_p=0.1):
-        super(SimpleEncoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-        self.gru = nn.GRU(input_size, hidden_size, batch_first=True)
-        self.dropout = nn.Dropout(dropout_p)
+        self.conv2 = nn.Conv2d(in_channels=hidden_size,
+                               out_channels=hidden_size,
+                               kernel_size=(1, K),
+                               padding=(0, P),
+                               bias=False)
+        self.bn2 = nn.BatchNorm2d(hidden_size)
 
-    def forward(self, input):
-        output, hidden = self.gru(self.dropout(input))
-        return output, hidden
-
-
-class EncoderRNN(nn.Module):
-    def __init__(self, num_leads, hidden_size, dropout_p=0.1, target_seq_length=125):
-        super(EncoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-
-        # Assuming that num_leads can vary, use it to set the in_channels
-        self.conv1 = nn.Conv1d(in_channels=num_leads, out_channels=24, kernel_size=5, stride=1, padding=2)
-        self.pool1 = nn.MaxPool1d(kernel_size=4, stride=4)
-        self.conv2 = nn.Conv1d(in_channels=24, out_channels=48, kernel_size=5, stride=1, padding=2)
-        self.pool2 = nn.MaxPool1d(kernel_size=4, stride=4)
-
-        self.dropout = nn.Dropout(dropout_p)
-
-        # Dynamically calculate the number of timesteps after convolutions and pooling
-        self.final_seq_length = target_seq_length
-        self.gru = nn.GRU(48, hidden_size, batch_first=True)
+        if self.down_sample:
+            self.idfunc_0 = nn.AvgPool2d(kernel_size=(1, 2), stride=(1, 2))
+            self.idfunc_1 = nn.Conv2d(in_channels=hidden_size,
+                                      out_channels=hidden_size,
+                                      kernel_size=(1, 1),
+                                      bias=False)
 
     def forward(self, x):
-        x = self.pool1(torch.relu(self.conv1(x)))
-        x = self.pool2(torch.relu(self.conv2(x)))
+        identity = x
+        x = F.leaky_relu(self.bn1(self.conv1(x)))
+        x = F.leaky_relu(self.bn2(self.conv2(x)))
+        if self.down_sample:
+            identity = self.idfunc_0(identity)
+            identity = self.idfunc_1(identity)
 
-        x = self.dropout(x)
+        if identity.size(2) != x.size(2) or identity.size(3) != x.size(3):
+            diff = x.size(3) - identity.size(3)
+            if diff > 0:  # x is larger
+                identity = F.pad(identity, (0, diff), "constant", 0)
+            else:  # identity is larger, need to crop or pool (example uses cropping)
+                identity = identity[:, :, :, :x.size(3)]
 
-        # Permutes and possibly pads if necessary (for demonstration)
-        x = x.permute(0, 2, 1)
-        current_length = x.shape[1]
-        if current_length < self.final_seq_length:
-            # Pad if the sequence is too short
-            pad = (0, 0, 0, self.final_seq_length - current_length)
-            x = nn.functional.pad(x, pad)
+        x = x+identity
+        return x
 
-        output, hidden = self.gru(x)
-        return output, hidden
+
+class NN(nn.Module):
+    def __init__(self, num_leads, hidden_size):
+        super(NN, self).__init__()
+        self.conv = nn.Conv2d(in_channels=num_leads,
+                              out_channels=hidden_size,
+                              kernel_size=(1, 15),
+                              padding=(0, 7),
+                              stride=(1, 2),
+                              bias=False)
+        self.bn = nn.BatchNorm2d(hidden_size)
+        self.rb_0 = MyResidualBlock(down_sample=True)
+        self.rb_1 = MyResidualBlock(down_sample=True)
+        self.rb_2 = MyResidualBlock(down_sample=True)
+        self.rb_3 = MyResidualBlock(down_sample=True)
+        self.rb_4 = MyResidualBlock(down_sample=True)
+
+        self.mha = nn.MultiheadAttention(hidden_size, 8)
+        self.hidden_transform = nn.Linear(16, hidden_size)
+
+    def forward(self, x):
+        x = x.unsqueeze(2)
+        x = F.leaky_relu(self.bn(self.conv(x)))
+
+        x = self.rb_0(x)
+        x = self.rb_1(x)
+        x = self.rb_2(x)
+        x = self.rb_3(x)
+        x = self.rb_4(x)
+
+        x = F.dropout(x, p=0.5, training=self.training)
+
+        x = x.squeeze(2).permute(2,0,1)
+        x, hidden = self.mha(x, x, x)
+        hidden = self.hidden_transform(hidden.mean(dim=1))
+        hidden = hidden.unsqueeze(0)
+        x = x.permute(1, 0, 2)
+        return x, hidden
+
+
 
 class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, max_len):
@@ -74,7 +113,7 @@ class DecoderRNN(nn.Module):
             decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden)
             decoder_outputs.append(decoder_output)
 
-            if (target_tensor is not None) and (random.random() < 0.9):
+            if target_tensor is not None:
                 # Teacher forcing: Feed the target as the next input
                 decoder_input = target_tensor[:, i].unsqueeze(1) # Teacher forcing
             else:
@@ -161,3 +200,14 @@ class AttnDecoderRNN(nn.Module):
 
         return output, hidden, attn_weights
 
+
+
+if __name__ == '__main__':
+    import torch
+
+    x = torch.randn(64, 12, 1000).to(device)
+    encoder = NN(num_leads=12, hidden_size=256).to(device)
+    decoder = DecoderRNN(hidden_size=256, output_size=150, max_len=35).to(device)
+    encoder_outputs, encoder_hidden = encoder(x)
+    decoder_outputs, decoder_hidden, attn_weights = decoder(encoder_outputs, encoder_hidden)
+    print()

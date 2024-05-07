@@ -156,5 +156,5 @@ if __name__ == '__main__':
 
     train(model, dataloader, val_dataloader, bce_loss, optimizer, scheduler, n_epochs=50)
 
-    # torch.save(model.state_dict(), './models/m02_bag-of-words_ISIBrnoAIMT/model_20_BoW.pt')
+    # torch.save(model.state_dict(), './models/m02_BagOfWords_ISIBrnoAIMT/model_20_BoW.pt')
 
