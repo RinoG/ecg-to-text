@@ -135,8 +135,8 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         one_hot_predictions = one_hot_encode(all_predictions, output_lang.n_words)
         one_hot_targets = one_hot_encode(all_targets, output_lang.n_words)
 
-        f1 = f1_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
-        jaccard = jaccard_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
+        f1 = f1_score(one_hot_targets, one_hot_predictions, average='weighted', zero_division=0)
+        jaccard = jaccard_score(one_hot_targets, one_hot_predictions, average='weighted', zero_division=0)
 
         predicted_texts = [' '.join(ids_to_text(p, output_lang.index2word)) for p in all_predictions]
         reference_texts = [' '.join(ids_to_text(r, output_lang.index2word)) for r in all_targets]
@@ -179,11 +179,13 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
         if meteor > best_score:
             best_score = meteor
             early_stopping_counter = 0
+            torch.save(encoder.state_dict(), f'./models/m03_EcgToText_RNN/saved_models/EncoderRNN.pth')
+            torch.save(decoder.state_dict(), f'./models/m03_EcgToText_RNN/saved_models/DecoderRNN.pth')
         else:
             early_stopping_counter += 1
 
         if early_stopping_counter >= patience:
-            print(f"No improvement in bleu score for {patience} consecutive epochs. Stopping early.")
+            print(f"No improvement in meteor score for {patience} consecutive epochs. Stopping early.")
             break
 
 
@@ -195,9 +197,9 @@ if __name__ == '__main__':
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print('Load Train Data ...')
-    _lang, dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device)
-    print('Load Val Data ...')
-    _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
+    _lang, dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='train', device=device)
+    # print('Load Val Data ...')
+    # _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
 
     # Model instantiation
     hidden_size = 256
@@ -206,11 +208,18 @@ if __name__ == '__main__':
     encoder = EncoderRNN(num_leads=12, hidden_size=hidden_size).to(device)
     decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=_lang.n_words, max_len=_lang.max_len).to(device)
 
-    print('Start Training ...')
-    train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 40)
+    # print('Start Training ...')
+    # train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 40)
 
-    print('Test Randomly ...')
-    _, test_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
+    # encoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/SimpleEncoderRNN.pth'))
+    # decoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/SimpleDecoderRNN.pth'))
+    encoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/EncoderRNN.pth'))
+    decoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/DecoderRNN.pth'))
+
+    print('Test Data ...')
+    _, test_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='test', device=device, _lang=_lang)
+
+    total_loss, f1, jaccard, rouge, meteor = validate_epoch(test_dataloader, encoder, decoder, criterion, _lang)
 
     encoder.eval()
     decoder.eval()

@@ -115,7 +115,7 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
     with torch.no_grad():
         for input_tensor, target_tensor in dataloader:
             encoder_outputs, encoder_hidden = encoder(input_tensor.permute(0, 2, 1))
-            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden, target_tensor)
+            decoder_outputs, _, _ = decoder(encoder_outputs, encoder_hidden)
             predicted_indices = decoder_outputs.topk(1)[1].squeeze().detach()
 
             loss = criterion(
@@ -130,8 +130,8 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         all_predictions = np.concatenate(all_predictions)
         all_targets = np.concatenate(all_targets)
 
-        one_hot_predictions = one_hot_encode(all_predictions, output_lang.n_words)
-        one_hot_targets = one_hot_encode(all_targets, output_lang.n_words)
+        one_hot_predictions = one_hot_encode(all_predictions, output_lang.n_words, offset=3)
+        one_hot_targets = one_hot_encode(all_targets, output_lang.n_words, offset=3)
 
         f1 = f1_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
         jaccard = jaccard_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
@@ -180,6 +180,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
         if meteor > best_score:
             best_score = meteor
             early_stopping_counter = 0
+            torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Encoder.pth')
+            torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Decoder.pth')
         else:
             early_stopping_counter += 1
 

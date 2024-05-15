@@ -42,21 +42,8 @@ def unicodeToAscii(s):
         if unicodedata.category(c) != 'Mn'
     )
 
-# Lowercase, trim, and remove non-letter characters
-def normalizeString(s):
-    s = unicodeToAscii(s.lower().strip())
-    s = re.sub(r"([.!?])", r" \1", s)
-    s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
-    return s.strip()
-
-def readLangs(reports, reverse=False):
-    sentences = [normalizeString(s)for s in reports]
-
+def prepareData(sentences):
     output_lang = Lang()
-    return output_lang, sentences
-
-def prepareData(reports):
-    output_lang, sentences = readLangs(reports)
     for s in sentences:
         output_lang.addSentence(s)
     return output_lang, sentences
@@ -76,10 +63,8 @@ def get_signals(file_path, data):
 
 def get_dataloader(file_path, mode, batch_size, device, _lang=None):
     data = pd.read_csv(file_path+f'/{mode}.csv', sep=',')
-    # signal_files = [f"{file_path}/signal_{i + 1}.csv" for i in range(10)]
-    # signals = np.array([pd.read_csv(f).values for f in signal_files])
+
     signals = get_signals(file_path, data)
-    # reduce dimensions of signals
 
     output_lang, sentences = prepareData(data['preprocessed_report'])
 
@@ -107,7 +92,7 @@ if __name__ == '__main__':
     import os
     os.chdir('../../')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    lang, dataloader = get_dataloader('./data_ptb-xl', 'train', 2, device)
+    lang, dataloader = get_dataloader('./data_ptb-xl', 'train', 64, device)
 
     for signal, report in dataloader:
         print(report)

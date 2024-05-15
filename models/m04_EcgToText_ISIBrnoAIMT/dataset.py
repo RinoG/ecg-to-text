@@ -11,10 +11,10 @@ import wfdb
 
 class Lang:
     def __init__(self):
-        self.word2index = {"<sos>": 0, "<eos>": 1, "<pad>": 2}
+        self.word2index = {"<sos>": 0, "<eos>": 1, "<pad>": 2, "<unk>": 3}
         self.word2count = {}
-        self.index2word = {0: "<sos>", 1: "<eos>", 2: "<pad>"}
-        self.n_words = 3  # Count SOS EOS and PAD
+        self.index2word = {0: "<sos>", 1: "<eos>", 2: "<pad>", 3: "<unk>"}
+        self.n_words = 4  # Count SOS EOS and PAD UNKNOWN
         self.max_len = 0
 
     def addSentence(self, sentence):
@@ -41,28 +41,20 @@ def unicodeToAscii(s):
         if unicodedata.category(c) != 'Mn'
     )
 
-# Lowercase, trim, and remove non-letter characters
-def normalizeString(s):
-    s = unicodeToAscii(s.lower().strip())
-    s = re.sub(r"([.!?])", r" \1", s)
-    s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
-    return s.strip()
 
-def readLangs(reports, reverse=False):
-    sentences = [normalizeString(s)for s in reports]
-
+def prepareData(sentences):
     output_lang = Lang()
-    return output_lang, sentences
-
-def prepareData(reports):
-    output_lang, sentences = readLangs(reports)
     for s in sentences:
         output_lang.addSentence(s)
     return output_lang, sentences
 
 def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ') if word in lang.word2index]
-
+    indexes = [
+        lang.word2index[word] if word in lang.word2index
+        else lang.word2index['<unk>']
+        for word in sentence.split(' ')
+    ]
+    return indexes
 
 def tensorFromSentence(lang, sentence, device):
     indexes = indexesFromSentence(lang, sentence)
@@ -75,10 +67,8 @@ def get_signals(file_path, data):
 
 def get_dataloader(file_path, mode, batch_size, device, _lang=None):
     data = pd.read_csv(file_path+f'/{mode}.csv', sep=',')
-    # signal_files = [f"{file_path}/signal_{i + 1}.csv" for i in range(10)]
-    # signals = np.array([pd.read_csv(f).values for f in signal_files])
+
     signals = get_signals(file_path, data)
-    # reduce dimensions of signals
 
     output_lang, sentences = prepareData(data['preprocessed_report'])
 

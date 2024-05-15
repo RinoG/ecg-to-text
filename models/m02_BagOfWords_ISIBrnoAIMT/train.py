@@ -87,7 +87,7 @@ def train(model, dataloader, val_dataloader, loss, optimizer, scheduler, n_epoch
             best_score = iou
             early_stopping_counter = 0
             n_bow = reports.shape[1]
-            torch.save(model.state_dict(), f'./models/m02_ISIBrnoAIMT_BagOfWords/model_{n_bow}_BoW.pt')
+            torch.save(model.state_dict(), f'./models/m02_BagOfWords_ISIBrnoAIMT/model_{n_bow}_BoW.pt')
         else:
             early_stopping_counter += 1
 
@@ -125,7 +125,7 @@ def get_predictions(model, dataloader):
     return targets, predictions_binary
 
 
-def get_metrics(model, dataloader, average='samples'):
+def get_metrics(model, dataloader, average='weighted'):
     y, p = get_predictions(model, dataloader)
     f1 = f1_score(y, p, average=average)
     iou = jaccard_score(y, p, average=average)
@@ -137,24 +137,25 @@ if __name__ == '__main__':
     from model import NN
     from dataset import PtbXlDataset
 
+    torch.manual_seed(42)
     os.chdir('../../')
 
-    n_BoW = 20
-    dataset = PtbXlDataset('data_ptb-xl/', 'train', n_BoW)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    for n_BoW in [20, 50, 100, 200, 500, 1000, 1500, 2000]:
+        dataset = PtbXlDataset('data_ptb-xl/', 'train', n_BoW)
+        dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
-    val_dataset = PtbXlDataset('data_ptb-xl/', 'val', n_BoW)
-    val_dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+        val_dataset = PtbXlDataset('data_ptb-xl/', 'val', n_BoW)
+        val_dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
-    loss_weight = (len(dataset) - dataset.summary(output='numpy')) / dataset.summary(output='numpy')
+        loss_weight = (len(dataset) - dataset.summary(output='numpy')) / dataset.summary(output='numpy')
 
-    model = NN(n_BoW).to(DEVICE)
-    # criterion = nn.BCEWithLogitsLoss()
-    bce_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(loss_weight).to(DEVICE))
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+        model = NN(n_BoW).to(DEVICE)
+        # criterion = nn.BCEWithLogitsLoss()
+        bce_loss = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(loss_weight).to(DEVICE))
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
 
-    train(model, dataloader, val_dataloader, bce_loss, optimizer, scheduler, n_epochs=50)
+        train(model, dataloader, val_dataloader, bce_loss, optimizer, scheduler, n_epochs=50)
 
     # torch.save(model.state_dict(), './models/m02_BagOfWords_ISIBrnoAIMT/model_20_BoW.pt')
 
