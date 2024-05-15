@@ -418,11 +418,11 @@ def train_part(model,dataset,loss,opt):
             y, p = model(x, l)
             #p = torch.sigmoid(y)
 
-            # M = chloss(t,p)
+            M = chloss(t,p)
             N = loss(input=y, target=t)
             Q = torch.mean(-4*p*(p-1))
-            # J = N - M + Q
-            J = N + Q
+            J = N - M + Q
+            # J = N + Q
             J.backward()
 
             # pbar.set_postfix(np.array([M.detach().cpu().numpy(),
