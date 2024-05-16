@@ -22,8 +22,8 @@ The purpose of this repository is to provide the necessary code and materials to
 To get started, clone this repository and install the required dependencies:
 
 ```bash
-git clone https://github.com/yourusername/repository.git
-cd repository
+git clone https://github.com/RinoG/ecg-to-text.git
+cd ecg-to-text
 pip install -r requirements.txt
 ```
 
