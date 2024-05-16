@@ -41,8 +41,7 @@ This repository is licensed under the MIT License. See the [LICENSE](LICENSE) fi
 ## References
 
 1. Classification of ECG Using Ensemble of Residual CNNs with Attention Mechanism / Petr Nejedly, Adam Ivora, Radovan Smisek et al. // Computing in Cardiology / Institute of Scientific Instruments of the Czech Academy of Sciences. — Brno, Czech Republic: 2021. — URL: https://www.cinc.org/archives/2021/pdf/CinC2021-014.pdf.
-2. Bahdanau Dzmitry, Cho Kyunghyun, Bengio Yoshua. Neural Machine Translation by Jointly Learning to Align and Translate. — 2016.
-3. Wagner Patrick, Strodthoff Nils, Bousseljot Ralf et al. PTB-XL, a large publicly available electrocardiography dataset (version 1.0.3). — 2022. — URL: https://doi.org/10.13026/kfzx-aw45.
-4. Machine learning-based detection of cardiovascular disease using ECG signals: performance vs. complexity / Huy Pham, Konstantin Egorov, Alexey Kazakov, Semen Budennyy // Frontiers in Cardiovascular Medicine. — 2023. — Vol. 10. — URL: https://www.frontiersin.org/articles/10.3389/fcvm.2023.1229743.
+2. Wagner Patrick, Strodthoff Nils, Bousseljot Ralf et al. PTB-XL, a large publicly available electrocardiography dataset (version 1.0.3). — 2022. — URL: https://doi.org/10.13026/kfzx-aw45.
+3. Machine learning-based detection of cardiovascular disease using ECG signals: performance vs. complexity / Huy Pham, Konstantin Egorov, Alexey Kazakov, Semen Budennyy // Frontiers in Cardiovascular Medicine. — 2023. — Vol. 10. — URL: https://www.frontiersin.org/articles/10.3389/fcvm.2023.1229743.
 
 For a full list of references, please see the thesis document.
