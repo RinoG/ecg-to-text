@@ -149,7 +149,7 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         return total_loss / len(dataloader), f1, jaccard, rouge_scores, meteor_score
 
 
-def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=5):
+def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=10):
     start = time.time()
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)

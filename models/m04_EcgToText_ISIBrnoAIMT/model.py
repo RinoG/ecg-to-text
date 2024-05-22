@@ -65,11 +65,11 @@ class NN(nn.Module):
                               stride=(1, 2),
                               bias=False)
         self.bn = nn.BatchNorm2d(hidden_size)
-        self.rb_0 = MyResidualBlock(down_sample=True)
-        self.rb_1 = MyResidualBlock(down_sample=True)
-        self.rb_2 = MyResidualBlock(down_sample=True)
-        self.rb_3 = MyResidualBlock(down_sample=True)
-        self.rb_4 = MyResidualBlock(down_sample=True)
+        self.rb_0 = MyResidualBlock(down_sample=True, hidden_size=hidden_size)
+        self.rb_1 = MyResidualBlock(down_sample=True, hidden_size=hidden_size)
+        self.rb_2 = MyResidualBlock(down_sample=True, hidden_size=hidden_size)
+        self.rb_3 = MyResidualBlock(down_sample=True, hidden_size=hidden_size)
+        self.rb_4 = MyResidualBlock(down_sample=True, hidden_size=hidden_size)
 
         self.mha = nn.MultiheadAttention(hidden_size, 8)
         self.hidden_transform = nn.Linear(16, hidden_size)
@@ -134,11 +134,11 @@ class DecoderRNN(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, encoder_hidden_size, decoder_hidden_size):
         super(BahdanauAttention, self).__init__()
-        self.Wa = nn.Linear(hidden_size, hidden_size)
-        self.Ua = nn.Linear(hidden_size, hidden_size)
-        self.Va = nn.Linear(hidden_size, 1)
+        self.Wa = nn.Linear(decoder_hidden_size, decoder_hidden_size)
+        self.Ua = nn.Linear(encoder_hidden_size, decoder_hidden_size)
+        self.Va = nn.Linear(decoder_hidden_size, 1)
 
     def forward(self, query, keys):
         scores = self.Va(torch.tanh(self.Wa(query) + self.Ua(keys)))
@@ -151,19 +151,20 @@ class BahdanauAttention(nn.Module):
 
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, max_len, dropout_p=0.1):
+    def __init__(self, hidden_size, encoder_hidden_size, output_size, max_len, dropout_p=0.1):
         super(AttnDecoderRNN, self).__init__()
         self.max_len = max_len
+        self.hidden_transform = nn.Linear(encoder_hidden_size, hidden_size)
         self.embedding = nn.Embedding(output_size, hidden_size)
-        self.attention = BahdanauAttention(hidden_size)
-        self.gru = nn.GRU(2 * hidden_size, hidden_size, batch_first=True)
+        self.attention = BahdanauAttention(encoder_hidden_size, hidden_size)
+        self.gru = nn.GRU(encoder_hidden_size + hidden_size, hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
         batch_size = encoder_outputs.size(0)
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=device).fill_(SOS_token)
-        decoder_hidden = encoder_hidden
+        decoder_hidden = self.hidden_transform(encoder_hidden)
         decoder_outputs = []
         attentions = []
 
@@ -189,7 +190,7 @@ class AttnDecoderRNN(nn.Module):
         return decoder_outputs, decoder_hidden, attentions
 
     def forward_step(self, input, hidden, encoder_outputs):
-        embedded =  self.dropout(self.embedding(input))
+        embedded = self.dropout(self.embedding(input))
 
         query = hidden.permute(1, 0, 2)
         context, attn_weights = self.attention(query, encoder_outputs)
@@ -205,9 +206,27 @@ class AttnDecoderRNN(nn.Module):
 if __name__ == '__main__':
     import torch
 
+    # hidden_size = 128
+    # hidden_size = 256
+    # hidden_size = 512
+    # hidden_size = 1024
+    encoder_hidden_size = 512
+    decoder_hidden_size = 256
+
     x = torch.randn(64, 12, 1000).to(device)
-    encoder = NN(num_leads=12, hidden_size=256).to(device)
-    decoder = DecoderRNN(hidden_size=256, output_size=150, max_len=35).to(device)
+    target = torch.randint(0, 2788, (64, 64)).to(device)
+
+    encoder = NN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
+    decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
+                             encoder_hidden_size=encoder_hidden_size,
+                             output_size=2788,
+                             max_len=64).to(device)
+
+    n_encoder = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    n_decoder = sum(p.numel() for p in decoder.parameters() if p.requires_grad)
+
+    print(f"Encoder: {n_encoder}; Decoder: {n_decoder}")
+
     encoder_outputs, encoder_hidden = encoder(x)
-    decoder_outputs, decoder_hidden, attn_weights = decoder(encoder_outputs, encoder_hidden)
+    decoder_outputs, decoder_hidden, attn_weights = decoder(encoder_outputs, encoder_hidden, target)
     print()

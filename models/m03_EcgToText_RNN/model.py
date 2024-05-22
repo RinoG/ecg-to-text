@@ -95,11 +95,11 @@ class DecoderRNN(nn.Module):
 
 
 class BahdanauAttention(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, encoder_hidden_size, decoder_hidden_size):
         super(BahdanauAttention, self).__init__()
-        self.Wa = nn.Linear(hidden_size, hidden_size)
-        self.Ua = nn.Linear(hidden_size, hidden_size)
-        self.Va = nn.Linear(hidden_size, 1)
+        self.Wa = nn.Linear(decoder_hidden_size, decoder_hidden_size)
+        self.Ua = nn.Linear(encoder_hidden_size, decoder_hidden_size)
+        self.Va = nn.Linear(decoder_hidden_size, 1)
 
     def forward(self, query, keys):
         scores = self.Va(torch.tanh(self.Wa(query) + self.Ua(keys)))
@@ -112,11 +112,12 @@ class BahdanauAttention(nn.Module):
 
 
 class AttnDecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, max_len, dropout_p=0.1):
+    def __init__(self, hidden_size, encoder_hidden_size, output_size, max_len, dropout_p=0.1):
         super(AttnDecoderRNN, self).__init__()
         self.max_len = max_len
+        self.hidden_transform = nn.Linear(encoder_hidden_size, hidden_size)
         self.embedding = nn.Embedding(output_size, hidden_size)
-        self.attention = BahdanauAttention(hidden_size)
+        self.attention = BahdanauAttention(encoder_hidden_size, hidden_size)
         self.gru = nn.GRU(2 * hidden_size, hidden_size, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(dropout_p)
@@ -124,7 +125,7 @@ class AttnDecoderRNN(nn.Module):
     def forward(self, encoder_outputs, encoder_hidden, target_tensor=None):
         batch_size = encoder_outputs.size(0)
         decoder_input = torch.empty(batch_size, 1, dtype=torch.long, device=device).fill_(SOS_token)
-        decoder_hidden = encoder_hidden
+        decoder_hidden = self.hidden_transform(encoder_hidden)
         decoder_outputs = []
         attentions = []
 
@@ -161,3 +162,30 @@ class AttnDecoderRNN(nn.Module):
 
         return output, hidden, attn_weights
 
+
+if __name__ == '__main__':
+    import torch
+
+    # hidden_size = 128
+    # hidden_size = 256
+    # hidden_size = 512
+    # hidden_size = 1024
+    encoder_hidden_size = 2048
+    decoder_hidden_size = 256
+
+    x = torch.randn(64, 1000, 12).to(device)
+    target = torch.randn(64, 64).to(device)
+    encoder = EncoderRNN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
+    decoder = AttnDecoderRNN(hidden_size=encoder_hidden_size,
+                             encoder_hidden_size=encoder_hidden_size,
+                             output_size=2788,
+                             max_len=35).to(device)
+
+    n_encoder = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    n_decoder = sum(p.numel() for p in decoder.parameters() if p.requires_grad)
+
+    print(f"Encoder: {n_encoder}; Decoder: {n_decoder}")
+
+    encoder_outputs, encoder_hidden = encoder(x)
+    decoder_outputs, decoder_hidden, attn_weights = decoder(encoder_outputs, encoder_hidden)
+    print()

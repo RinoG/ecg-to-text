@@ -150,7 +150,7 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         return total_loss / len(dataloader), f1, jaccard, rouge_scores, meteor_score
 
 
-def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=5):
+def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=10, size=256):
     start = time.time()
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
@@ -163,25 +163,18 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
         train_loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion)
         val_loss, f1, jaccard, rouge, meteor = validate_epoch(val_dataloader, encoder, decoder, criterion, output_lang)
 
+
         print(f'{timeSince(start, epoch / n_epochs)} ({epoch} {round(epoch / n_epochs * 100, 2)}%) | '
-              f'Train Loss: {round(train_loss, 4)} | Val Loss: {round(val_loss, 4)} | '
-              f'Jaccard: {round(jaccard, 4)} | F1: {round(f1, 4)} | ')
-        print(f'\tRouge-1 (p): {round(rouge["rouge-1"]["p"], 4)} | '
-              f'Rouge-1 (r): {round(rouge["rouge-1"]["r"], 4)} | '
-              f'Rouge-1 (f1): {round(rouge["rouge-1"]["f"], 4)}')
-        print(f'\tRouge-2 (p): {round(rouge["rouge-2"]["p"], 4)} | '
-              f'Rouge-2 (r): {round(rouge["rouge-2"]["r"], 4)} | '
-              f'Rouge-2 (f1): {round(rouge["rouge-2"]["f"], 4)}')
-        print(f'\tRouge-L (p): {round(rouge["rouge-l"]["p"], 4)} | '
-              f'Rouge-L (r): {round(rouge["rouge-l"]["r"], 4)} | '
-              f'Rouge-L (f1): {round(rouge["rouge-l"]["f"], 4)}')
-        print(f'\tMETEOR: {round(meteor, 4)}')
+              f'Train Loss: {round(train_loss, 4)} | Val METEOR: {round(meteor, 4)}')
 
         if meteor > best_score:
             best_score = meteor
             early_stopping_counter = 0
-            torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Encoder.pth')
-            torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Decoder.pth')
+            # torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Encoder.pth')
+            # torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Decoder.pth')
+            torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_different_hidden_size/Encoder_{size}.pth')
+            torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_different_hidden_size/Decoder_{size}.pth')
+
         else:
             early_stopping_counter += 1
 
