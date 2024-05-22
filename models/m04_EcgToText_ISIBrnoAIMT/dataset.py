@@ -65,9 +65,11 @@ def get_signals(file_path, data):
     ecg_signal_path = data["filename_lr"]
     return np.array([wfdb.rdrecord(file_path + '/' + path).p_signal for path in ecg_signal_path])
 
-def get_dataloader(file_path, mode, batch_size, device, _lang=None):
+def get_dataloader(file_path, mode, batch_size, device, _lang=None, frac=1):
     data = pd.read_csv(file_path+f'/{mode}.csv', sep=',')
-
+    data = data.sample(frac=frac, random_state=42)
+    if frac != 1:
+        print(f'Sampling {len(data)} ({frac*100}%)')
     signals = get_signals(file_path, data)
 
     output_lang, sentences = prepareData(data['preprocessed_report'])
