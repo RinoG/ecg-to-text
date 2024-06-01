@@ -26,7 +26,7 @@ def timeSince(since, percent):
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion):
+          decoder_optimizer, criterion, max_norm=1):
     encoder.train()
     decoder.train()
     total_loss = 0
@@ -44,6 +44,8 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
             target_tensor.view(-1)
         )
         loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(list(encoder.parameters()) + list(decoder.parameters()), max_norm)
 
         encoder_optimizer.step()
         decoder_optimizer.step()
@@ -149,7 +151,7 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         return total_loss / len(dataloader), f1, jaccard, rouge_scores, meteor_score
 
 
-def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=10):
+def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=10, max_grad_norm=1):
     start = time.time()
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
@@ -159,22 +161,11 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
     early_stopping_counter = 0
 
     for epoch in range(1, n_epochs + 1):
-        train_loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion)
+        train_loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_grad_norm)
         val_loss, f1, jaccard, rouge, meteor = validate_epoch(val_dataloader, encoder, decoder, criterion, output_lang)
 
         print(f'{timeSince(start, epoch / n_epochs)} ({epoch} {round(epoch / n_epochs * 100, 2)}%) | '
-              f'Train Loss: {round(train_loss, 4)} | Val Loss: {round(val_loss, 4)} | '
-              f'Jaccard: {round(jaccard, 4)} | F1: {round(f1, 4)} | ')
-        print(f'\tRouge-1 (p): {round(rouge["rouge-1"]["p"], 4)} | '
-              f'Rouge-1 (r): {round(rouge["rouge-1"]["r"], 4)} | '
-              f'Rouge-1 (f1): {round(rouge["rouge-1"]["f"], 4)}')
-        print(f'\tRouge-2 (p): {round(rouge["rouge-2"]["p"], 4)} | '
-              f'Rouge-2 (r): {round(rouge["rouge-2"]["r"], 4)} | '
-              f'Rouge-2 (f1): {round(rouge["rouge-2"]["f"], 4)}')
-        print(f'\tRouge-L (p): {round(rouge["rouge-l"]["p"], 4)} | '
-              f'Rouge-L (r): {round(rouge["rouge-l"]["r"], 4)} | '
-              f'Rouge-L (f1): {round(rouge["rouge-l"]["f"], 4)}')
-        print(f'\tMETEOR: {round(meteor, 4)}')
+              f'Train Loss: {round(train_loss, 4)} | Val METEOR: {round(meteor, 4)}')
 
         if meteor > best_score:
             best_score = meteor
@@ -196,30 +187,43 @@ if __name__ == '__main__':
     os.chdir('../../')
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print('Load Train Data ...')
+
+    print('Loading data...')
     _lang, dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='train', device=device)
-    # print('Load Val Data ...')
-    # _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
+    _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='val', device=device, _lang=_lang)
 
     # Model instantiation
-    hidden_size = 256
+    encoder_hidden_size = 256
+    decoder_hidden_size = 256
     criterion = nn.NLLLoss()
+
     # encoder = SimpleEncoderRNN(input_size=12, hidden_size=hidden_size).to(device)
-    encoder = EncoderRNN(num_leads=12, hidden_size=hidden_size).to(device)
-    decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=_lang.n_words, max_len=_lang.max_len).to(device)
+    encoder = EncoderRNN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
+    decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
+                             encoder_hidden_size=encoder_hidden_size,
+                             output_size=_lang.n_words, max_len=_lang.max_len).to(device)
 
-    # print('Start Training ...')
-    # train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 40)
-
-    # encoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/SimpleEncoderRNN.pth'))
-    # decoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/SimpleDecoderRNN.pth'))
-    encoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/EncoderRNN.pth'))
-    decoder.load_state_dict(torch.load('./models/m03_EcgToText_RNN/saved_models/DecoderRNN.pth'))
+    print('Start Training ...')
+    train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 50, max_grad_norm=10)
 
     print('Test Data ...')
     _, test_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='test', device=device, _lang=_lang)
 
     total_loss, f1, jaccard, rouge, meteor = validate_epoch(test_dataloader, encoder, decoder, criterion, _lang)
+
+    print(f'Test Loss:    {round(total_loss, 5)}')
+    print(f'F1:           {round(f1, 5)}')
+    print(f'Jaccard:      {round(jaccard, 5)}')
+    print(f'Rouge-1 (p):  {round(rouge["rouge-1"]["p"], 3)}')
+    print(f'Rouge-1 (r):  {round(rouge["rouge-1"]["r"], 3)}')
+    print(f'Rouge-1 (f1): {round(rouge["rouge-1"]["f"], 3)}')
+    print(f'Rouge-2 (p):  {round(rouge["rouge-2"]["p"], 3)}')
+    print(f'Rouge-2 (r):  {round(rouge["rouge-2"]["r"], 3)}')
+    print(f'Rouge-2 (f1): {round(rouge["rouge-2"]["f"], 3)}')
+    print(f'Rouge-L (p):  {round(rouge["rouge-l"]["p"], 3)}')
+    print(f'Rouge-L (r):  {round(rouge["rouge-l"]["r"], 3)}')
+    print(f'Rouge-L (f1): {round(rouge["rouge-l"]["f"], 3)}')
+    print(f'METEOR:       {round(meteor, 3)}')
 
     encoder.eval()
     decoder.eval()

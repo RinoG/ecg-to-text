@@ -24,7 +24,7 @@ def timeSince(since, percent):
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
 def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
-          decoder_optimizer, criterion):
+          decoder_optimizer, criterion, max_norm=1):
     encoder.train()
     decoder.train()
     total_loss = 0
@@ -42,6 +42,8 @@ def train_epoch(dataloader, encoder, decoder, encoder_optimizer,
             target_tensor.view(-1)
         )
         loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(list(encoder.parameters()) + list(decoder.parameters()), max_norm)
 
         encoder_optimizer.step()
         decoder_optimizer.step()
@@ -133,8 +135,8 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         one_hot_predictions = one_hot_encode(all_predictions, output_lang.n_words, offset=3)
         one_hot_targets = one_hot_encode(all_targets, output_lang.n_words, offset=3)
 
-        f1 = f1_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
-        jaccard = jaccard_score(one_hot_targets, one_hot_predictions, average='macro', zero_division=0)
+        f1 = f1_score(one_hot_targets, one_hot_predictions, average='weighted', zero_division=0)
+        jaccard = jaccard_score(one_hot_targets, one_hot_predictions, average='weighted', zero_division=0)
 
         predicted_texts = [' '.join(ids_to_text(p, output_lang.index2word)) for p in all_predictions]
         reference_texts = [' '.join(ids_to_text(r, output_lang.index2word)) for r in all_targets]
@@ -150,7 +152,8 @@ def validate_epoch(dataloader, encoder, decoder, criterion, output_lang):
         return total_loss / len(dataloader), f1, jaccard, rouge_scores, meteor_score
 
 
-def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang, n_epochs, learning_rate=0.001, patience=10, size=256):
+def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_lang,
+          n_epochs, learning_rate=0.001, patience=10, max_grad_norm=1, size=256):
     start = time.time()
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=learning_rate)
@@ -160,12 +163,12 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
     early_stopping_counter = 0
 
     for epoch in range(1, n_epochs + 1):
-        train_loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion)
+        train_loss = train_epoch(train_dataloader, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_grad_norm)
         val_loss, f1, jaccard, rouge, meteor = validate_epoch(val_dataloader, encoder, decoder, criterion, output_lang)
 
 
         print(f'{timeSince(start, epoch / n_epochs)} ({epoch} {round(epoch / n_epochs * 100, 2)}%) | '
-              f'Train Loss: {round(train_loss, 4)} | Val METEOR: {round(meteor, 4)}')
+                    f'Train Loss: {round(train_loss, 4)} | Val METEOR: {round(meteor, 4)}')
 
         if meteor > best_score:
             best_score = meteor
@@ -174,6 +177,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
             # torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/saved_models/Decoder.pth')
             torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_different_hidden_size/Encoder_{size}.pth')
             torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_different_hidden_size/Decoder_{size}.pth')
+            # torch.save(encoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_reduced_dataset/Encoder_{size}.pth')
+            # torch.save(decoder.state_dict(), f'./models/m04_EcgToText_ISIBrnoAIMT/models_with_reduced_dataset/Decoder_{size}.pth')
 
         else:
             early_stopping_counter += 1
@@ -185,33 +190,51 @@ def train(train_dataloader, val_dataloader, encoder, decoder, criterion, output_
 
 if __name__ == '__main__':
     from dataset import get_dataloader, tensorFromSentence
-    from model import NN, DecoderRNN, AttnDecoderRNN
+    from model import NN, DecoderRNN, AttnDecoderRNN, TransformerDecoder
+    import logging
     import os
     os.chdir('../../')
 
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
+
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print('Load Train Data ...')
-    _lang, dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device)
-    print('Load Val Data ...')
-    _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
+
+    print('Load Data ...')
+    _lang, dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='train', device=device)
+    _, val_dataloader = get_dataloader(file_path='./data_ptb-xl', batch_size=64, mode='val', device=device, _lang=_lang)
 
     # Model instantiation
-    hidden_size = 256
-
-    encoder = NN(num_leads=12, hidden_size=hidden_size).to(device)
-    decoder = AttnDecoderRNN(hidden_size=hidden_size, output_size=_lang.n_words, max_len=_lang.max_len).to(device)
+    encoder_hidden_size = 512
+    decoder_hidden_size = 256
     criterion = nn.NLLLoss()
+    for i in range(10):
+        print(f'\n############### RUN {i+1} ###############')
+        encoder = NN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
+        # decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
+        #                          encoder_hidden_size=encoder_hidden_size,
+        #                          output_size=_lang.n_words, max_len=_lang.max_len).to(device)
+        decoder = TransformerDecoder(output_size=2788, hidden_size=512, num_layers=6, num_heads=8).to(device)
 
-    print('Start Training ...')
-    train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 40)
+        print('\nStart Training ...')
+        train(dataloader, val_dataloader, encoder, decoder, criterion, _lang, 10, max_grad_norm=1)
 
-    print('Test Randomly ...')
-    _, test_dataloader = get_dataloader(file_path='data_ptb-xl', batch_size=64, mode='debug', device=device, _lang=_lang)
+        print('\nTest Data ...')
+        encoder = NN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
+        # decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
+        #                          encoder_hidden_size=encoder_hidden_size,
+        #                          output_size=_lang.n_words, max_len=_lang.max_len).to(device)
+        decoder = TransformerDecoder(output_size=2788, hidden_size=512, num_layers=6, num_heads=8).to(device)
+
+        _, test_dataloader = get_dataloader(file_path='data_ptb-xl', batch_size=64, mode='test', device=device, _lang=_lang)
+
+        total_loss, f1, jaccard, rouge, meteor = validate_epoch(test_dataloader, encoder, decoder, criterion, _lang)
+
+        print(f'Test Loss:    {round(total_loss, 5)}')
+        print(f'METEOR:       {round(meteor, 3)}')
 
     encoder.eval()
     decoder.eval()
     print_first_n_target_prediction(test_dataloader, encoder, decoder, _lang)
-
-
-
 

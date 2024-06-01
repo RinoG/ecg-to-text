@@ -35,6 +35,7 @@ class MyResidualBlock(nn.Module):
                                       out_channels=hidden_size,
                                       kernel_size=(1, 1),
                                       bias=False)
+            self.idfunc_1_bn = nn.BatchNorm2d(hidden_size)
 
     def forward(self, x):
         identity = x
@@ -43,6 +44,7 @@ class MyResidualBlock(nn.Module):
         if self.down_sample:
             identity = self.idfunc_0(identity)
             identity = self.idfunc_1(identity)
+            identity = self.idfunc_1_bn(identity)
 
         if identity.size(2) != x.size(2) or identity.size(3) != x.size(3):
             diff = x.size(3) - identity.size(3)
@@ -84,7 +86,7 @@ class NN(nn.Module):
         x = self.rb_3(x)
         x = self.rb_4(x)
 
-        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.dropout(x, p=0.3, training=self.training)
 
         x = x.squeeze(2).permute(2,0,1)
         x, hidden = self.mha(x, x, x)
@@ -202,6 +204,48 @@ class AttnDecoderRNN(nn.Module):
         return output, hidden, attn_weights
 
 
+class TransformerDecoderLayer(nn.Module):
+    def __init__(self, hidden_size, num_heads, dropout_p=0.1):
+        super(TransformerDecoderLayer, self).__init__()
+        self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, dropout_p)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(hidden_size, 4 * hidden_size),
+            nn.ReLU(),
+            nn.Linear(4 * hidden_size, hidden_size)
+        )
+        self.layernorm1 = nn.LayerNorm(hidden_size)
+        self.layernorm2 = nn.LayerNorm(hidden_size)
+        self.dropout = nn.Dropout(dropout_p)
+
+    def forward(self, tgt, memory, tgt_mask=None, memory_mask=None):
+        tgt2 = self.layernorm1(tgt + self.dropout(self.multihead_attn(tgt, tgt, tgt, attn_mask=tgt_mask)[0]))
+        tgt3 = self.layernorm2(tgt2 + self.dropout(self.feed_forward(tgt2)))
+        return tgt3
+
+
+class TransformerDecoder(nn.Module):
+    def __init__(self, output_size, hidden_size, num_layers, num_heads, dropout_p=0.1):
+        super(TransformerDecoder, self).__init__()
+        self.embedding = nn.Embedding(output_size, hidden_size)
+        self.pos_encoder = nn.Parameter(torch.randn(1, 64, hidden_size))
+        self.layers = nn.ModuleList([TransformerDecoderLayer(hidden_size, num_heads, dropout_p) for _ in range(num_layers)])
+        self.linear = nn.Linear(hidden_size, output_size)
+
+    def forward(self, src, memory, src_mask=None, memory_mask=None):
+        # src.shape = torch.Size([64, 16, 512])
+        # src = src.long()
+        # src.shape = torch.Size([64, 16, 512])
+        # src = self.embedding(src)
+        # src.shape = torch.Size([64, 16, 512, 512])
+        pos_encoding = self.pos_encoder[:, :src.size(1), :]
+        # self.pos_encoder.shape = torch.Size([1, 64, 512])
+        # pos_encoding.shape = torch.Size([1, 16, 512])
+        src += pos_encoding
+        for layer in self.layers:
+            src = layer(src, memory, tgt_mask=src_mask, memory_mask=memory_mask)
+        output = self.linear(src)
+        return F.log_softmax(output, dim=-1)
+
 
 if __name__ == '__main__':
     import torch
@@ -217,10 +261,11 @@ if __name__ == '__main__':
     target = torch.randint(0, 2788, (64, 64)).to(device)
 
     encoder = NN(num_leads=12, hidden_size=encoder_hidden_size).to(device)
-    decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
-                             encoder_hidden_size=encoder_hidden_size,
-                             output_size=2788,
-                             max_len=64).to(device)
+    # decoder = AttnDecoderRNN(hidden_size=decoder_hidden_size,
+    #                          encoder_hidden_size=encoder_hidden_size,
+    #                          output_size=2788,
+    #                          max_len=64).to(device)
+    decoder = TransformerDecoder(output_size=2788, hidden_size=512, num_layers=6, num_heads=8).to(device)
 
     n_encoder = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
     n_decoder = sum(p.numel() for p in decoder.parameters() if p.requires_grad)
